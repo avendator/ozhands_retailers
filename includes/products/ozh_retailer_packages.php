@@ -56,8 +56,8 @@ function show_retailer_packages() {
 						</span>
 						<?php
 						if ( ozh_get_retailer_product_limit( $cuser->ID , get_the_ID() ) !== 0 ) { ?>
-							<a href="?checkout" rel="nofollow" data-renew="renew" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
-								<span class="buy-package">Renew Package</span>
+							<a href="?checkout" rel="nofollow" data-renew="renewal" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
+								<span class="buy-package">Renewal Package</span>
 							</a>
 						<?php } else { ?>										
 							<a href="?checkout" rel="nofollow" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
@@ -172,14 +172,14 @@ function before_checkout_create_order( $order, $data ) {
 }
 
 /**
- * adding to user meta "package_renew" for renew subscription of retailer
+ * adding to user meta "finish_date" and "package_renewal" if it is a renewal of package
  */
 add_action( 'woocommerce_payment_complete', 'ozh_payment_complete' );
 function ozh_payment_complete( $order_id ) {
 
 	$order = wc_get_order( $order_id );
 	$start = $order->get_date_paid()->date_i18n('d-m-Y');
-	$renew = WC()->session->get('package_renew');
+	$renewal = WC()->session->get('package_renewal');
 
     $start = explode('-', $start);
     $finish = array();
@@ -200,24 +200,10 @@ function ozh_payment_complete( $order_id ) {
     $finish = strtotime( implode( '-', $finish) );
     // one month active of subscription
     $finish = $finish - $start;
-	if ( $renew ) {
+	if ( $renewal ) {
 		$package_id = WC()->session->get('package_id');
-
-	    $customer_orders = get_posts(array(
-	        'numberposts' => -1,
-	        'meta_key' => '_customer_user',
-	        'meta_value' => get_current_user_id(),
-	        'orderby' => 'date',
-	        'order' => 'ASC',        
-	        'post_type' => 'shop_order',
-	        'post_status' => 'wc-processing'
-	    ));
-	    $order_array = [];
-
-	    foreach ($customer_orders as $customer_order) {
-	        $order = wc_get_order($customer_order);
-	        $order_array[] = ['ID' => $order->get_id()];
-	    }
+		// all orders id's by user id
+	    $order_array = ozh_get_orders_ids( get_current_user_id() );
 	    $finish_dates = [];
 
         foreach ( $order_array as $order ) {
@@ -234,7 +220,7 @@ function ozh_payment_complete( $order_id ) {
 
 		update_post_meta( $order_id, 'finish_date', $finish_date );
 
-		update_post_meta( $order_id, 'package_renew', $renew );		
+		update_post_meta( $order_id, 'package_renewal', $renewal );		
 	}
 	else {
 	    update_post_meta( $order_id, 'finish_date', $finish );
