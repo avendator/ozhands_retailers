@@ -53,18 +53,22 @@ function show_retailer_packages() {
 							if ( !get_post_meta( get_the_ID(), 'trial', true ) ) {
 								echo get_post_meta( get_the_ID(), 'price', true ) .'$'; 
 							} ?>							
-						</span>						
-						<a href="?checkout" rel="nofollow" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
+						</span>
+						<?php
+						if ( ozh_get_retailer_product_limit( $cuser->ID , get_the_ID() ) !== 0 ) { ?>
+							<a href="?checkout" rel="nofollow" data-renew="renew" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
+								<span class="buy-package">Renew Package</span>
+							</a>
+						<?php } else { ?>										
+							<a href="?checkout" rel="nofollow" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
 							<?php 
-							if ( ozh_get_retailer_product_limit( $cuser->ID , get_the_ID() ) !== 0 ) {
-								echo '<span class="buy-package">Renew Package</span>'; 
-							}
-							elseif ( get_post_meta( get_the_ID(), 'trial', true ) ) {
+							if ( get_post_meta( get_the_ID(), 'trial', true ) ) {
 								echo '<span class="buy-package">Start Free Trial</span>';
 							}
 							else {
 								echo '<span class="buy-package">Buy</span>';
-							} ?>							
+							}
+						} ?>
 						</a>
 					</div>
 				</div>
@@ -93,13 +97,17 @@ function show_retailer_packages() {
 add_action('wp_ajax_'.'buy_retailer_package', 'buy_retailer_package');
 add_action('wp_ajax_'.'buy_retailer_package', 'buy_retailer_package');
 function buy_retailer_package() {
-	$package_id = $_POST['data'];
+	$package_id = $_POST['data']['package_id'];
+	$renew = $_POST['data']['renew'];
 	$product_name = get_the_title( $package_id );
 	$price = get_post_meta( $package_id, 'price', true );
 	WC()->session->cleanup_sessions();
 	WC()->session->set('package_id', $package_id);
 	WC()->session->set('package_price', $price);
 	WC()->session->set('package_name', $product_name);
+	if ( $renew !== false ) {
+		WC()->session->set('package_renew', $renew);
+	}
 	WC()->cart->empty_cart();
 	$product_id = wc_get_product_id_by_sku( 'ta-15488ks' );
 	WC()->cart->add_to_cart($product_id, 1);
@@ -112,7 +120,8 @@ function buy_retailer_package() {
  * get the price of retailer package
  */
 add_action('woocommerce_get_price','retailer_get_price', 10, 2);
-function retailer_get_price( $price, $product ){
+function retailer_get_price( $price, $product ) {
+
 	$current_user = wp_get_current_user();
 	$product_id = wc_get_product_id_by_sku( 'ta-15488ks' );
 	if ( $current_user->roles[0] == 'retailer' && $product->id == $product_id && WC()->session->get('package_price') ) {
@@ -163,16 +172,71 @@ function before_checkout_create_order( $order, $data ) {
 }
 
 /**
- * adding to user meta package ID & date of start actions subscription (retailer package)
+ * adding to user meta "package_renew" for renew subscription of retailer
  */
-// add_action( 'woocommerce_payment_complete', 'ozh_payment_complete' );
-// function ozh_payment_complete( $order_id ){
+add_action( 'woocommerce_payment_complete', 'ozh_payment_complete' );
+function ozh_payment_complete( $order_id ) {
 
-// 	$order = wc_get_order( $order_id );
-// 	$date =  date('Y-m-d H:i:s');
-// 	$data = array(
-// 		'start' => get_date_from_gmt($date, 'j n Y'),
-// 		'order_id' => $order_id
-// 	);
-// 	add_user_meta( get_current_user_id(), 'retailer_package_dates', $data );
-// }
+	$order = wc_get_order( $order_id );
+	$start = $order->get_date_paid()->date_i18n('d-m-Y');
+	$renew = WC()->session->get('package_renew');
+
+    $start = explode('-', $start);
+    $finish = array();
+    $this_month = new DateTime('last day of this month');
+    $this_month = explode( '-', $this_month->format('d-m-Y') );
+
+    $next_month = new DateTime('last day of next month');
+    $next_month = explode( '-', $next_month->format('d-m-Y') );
+
+    $finish[0] = $start[0];
+    $finish[1] = $next_month[1];
+    $finish[2] = $next_month[2];
+
+    if ( $start[0] == $this_month[0] ) {
+        $finish[0] = $next_month[0];
+    }
+    $start = strtotime( implode( '-', $start) );
+    $finish = strtotime( implode( '-', $finish) );
+    // one month active of subscription
+    $finish = $finish - $start;
+	if ( $renew ) {
+		$package_id = WC()->session->get('package_id');
+
+	    $customer_orders = get_posts(array(
+	        'numberposts' => -1,
+	        'meta_key' => '_customer_user',
+	        'meta_value' => get_current_user_id(),
+	        'orderby' => 'date',
+	        'order' => 'ASC',        
+	        'post_type' => 'shop_order',
+	        'post_status' => 'wc-processing'
+	    ));
+	    $order_array = [];
+
+	    foreach ($customer_orders as $customer_order) {
+	        $order = wc_get_order($customer_order);
+	        $order_array[] = ['ID' => $order->get_id()];
+	    }
+	    $finish_dates = [];
+
+        foreach ( $order_array as $order ) {
+
+			if ( get_post_meta( $order['ID'], 'package_id', true ) == $package_id ) {
+	        	$finish_dates[] = [
+	        		'finish_date' => get_post_meta( $order['ID'], 'finish_date', true )
+        		];				
+			}
+    	}
+	    $finish_date = $finish_dates[count($finish_dates) -2];
+	    // the last date action of previos subscription + one month of the next action
+	    $finish_date = $finish_date['finish_date'] + $finish;
+
+		update_post_meta( $order_id, 'finish_date', $finish_date );
+
+		update_post_meta( $order_id, 'package_renew', $renew );		
+	}
+	else {
+	    update_post_meta( $order_id, 'finish_date', $finish );
+	}
+}
