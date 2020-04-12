@@ -1,0 +1,43 @@
+/**-----------------------------------------------------------------
+# Retailer-Packages Page
+------------------------------------------------------------------*/
+.retailer-package-container {
+	display: inline-block;
+    width: 170px;
+    margin: 0 45px 45px 0;
+    text-align: center;
+}
+.ozh-packages-content {
+    height: 45px;
+}
+.ozh-packages-content,
+.retailer-price,
+.ozh-post-thumbnail {
+    background: #fff;
+}
+
+.ozh-packages-content,
+.package-title {
+    text-align: center;
+}
+.package-title {
+    background: rgba(0, 0, 0, 0.5);
+    margin: 0;
+}
+.retailer-price {
+    position: relative;
+    padding: 5px 0 10px 0;
+}
+.retailer-price-amount {
+	font-size: 24px;
+    margin: 0 0 0 -60px;
+}
+.buy-package {
+    position: absolute;
+    right: 10%;
+    padding: 5px 20px;
+    color: white;
+    background-color: #f05025;
+    border-radius: 4px;
+    text-align: center;
+}

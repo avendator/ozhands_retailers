@@ -1,0 +1,50 @@
+/**--------------------------------------------------
+# Dashboard - Page
+----------------------------------------------------*/
+/** Widgets **/
+.dokan-add-csv-link {
+	width: 150px;
+    float: right;
+    text-align: right;
+    position: relative;
+}
+#upload-csv-btn {
+	height: 35px;
+    border-radius: 4px;
+    line-height: normal;
+    padding-left: 30px;
+}
+span.dokan-add-csv-link > i.fa.fa-briefcase {
+    line-height: 36px;
+    text-align: center;
+    position: absolute;
+    left: 5%;
+    top: 16%;
+    color: #fff;
+}
+article.dashboard-content-area .subscriptions-pack > a,
+.dokan-dashboard .dokan-dashboard-content article.dashboard-content-area .dashboard-widget.big-counter .retailer-pack > a {
+    background-color: #f05025;
+    color: #fff;
+    margin: 4px 0 4px 0;
+    padding: 4px 0 4px 0;
+    border-radius: 4px;
+    display: inline-block;
+    width: 90%;
+    font-size: 16px;    
+}
+span.title,
+span.count {
+    color: #f05025;
+}
+.subscriptions-pack {
+    text-align: center;
+}
+
+/** Upload CSV Form **/
+.content-area.col-md-9 .site-content .entry-header h1.entry-title,
+.form-table.woocommerce-importer-options th,
+.woocommerce-progress-form-wrapper h2,
+.wrap.woocommerce h1 {
+    color: #f05025;
+}
