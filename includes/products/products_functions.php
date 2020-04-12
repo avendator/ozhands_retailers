@@ -342,4 +342,10 @@ function block_retailer_posts( $where, \WP_Query $query  ) {
 	    }
 	}
     return $where;
+    
+/**
+ * just test for GIT-settings
+ */
+function for_git_test() {
+	
 }
