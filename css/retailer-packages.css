@@ -2,20 +2,23 @@
 # Retailer-Packages Page
 ------------------------------------------------------------------*/
 .retailer-package-container {
-	display: inline-block;
+    display: inline-block;
     width: 170px;
-    margin: 0 45px 45px 0;
+    margin: 0 60px 45px 0;
     text-align: center;
-}
-.ozh-packages-content {
-    height: 45px;
-}
-.ozh-packages-content,
-.retailer-price,
-.ozh-post-thumbnail {
     background: #fff;
 }
-
+.ozh-packages-content {
+    height: 65px;
+}
+.ozh-post-thumbnail {
+    height: 170px;
+}
+.ozh-post-thumbnail > img {
+    margin: 15px 0 0 0;
+    width: 150px;
+    height: 150px;
+}
 .ozh-packages-content,
 .package-title {
     text-align: center;
@@ -29,15 +32,24 @@
     padding: 5px 0 10px 0;
 }
 .retailer-price-amount {
-	font-size: 24px;
-    margin: 0 0 0 -60px;
+    font-size: 24px;
+    margin: 0 0 0 -80px;
 }
-.buy-package {
+.buy-package,
+.renewal {
     position: absolute;
-    right: 10%;
-    padding: 5px 20px;
+    padding: 5px 10px;
     color: white;
     background-color: #f05025;
     border-radius: 4px;
     text-align: center;
+}
+.buy-package {
+    right: 10%;   
+}
+.renewal {
+    right: 0%;
+}
+span.trial {
+    display: block;
 }

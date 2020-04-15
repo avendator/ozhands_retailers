@@ -1,20 +1,15 @@
 /**--------------------------------
 # Admin Panel
 ---------------------------------*/ 
-/** button **/
-#save-rtp-meta {
-    background: #007cba;
-    border-color: #007cba;
-    color: #fff;
-    text-decoration: none;
-    text-shadow: none;
-    cursor: pointer;
-    margin: 20px 0 0 0;
-    padding: 5px 10px;
-    border-radius: 3px;
-}
 input.adm-retailer-input {
     padding: 5px 10px;
     width: 250px;
 }
-
+span.ret-row {
+    display: block;
+    margin-bottom: 5px;
+}
+.block-circle {
+    font-size: 50px;
+    color: red;
+}

@@ -3,13 +3,13 @@
 ----------------------------------------------------*/
 /** Widgets **/
 .dokan-add-csv-link {
-	width: 150px;
+    width: 150px;
     float: right;
     text-align: right;
     position: relative;
 }
 #upload-csv-btn {
-	height: 35px;
+    height: 35px;
     border-radius: 4px;
     line-height: normal;
     padding-left: 30px;

@@ -47,6 +47,6 @@
 
     <?php } else { ?>
         <li><a href="<?php echo esc_url( dokan_get_page_url( 'myaccount', 'woocommerce' ) ); ?>"><?php esc_html_e( 'Log in', 'dokan-lite' ); ?></a></li>
-        <li><a href="<?php echo esc_url( dokan_get_page_url( 'myaccount', 'woocommerce' ) ); ?>"><?php esc_html_e( 'Sign Up', 'dokan-lite' ); ?></a></li>
+        <li><a href="<?php echo home_url().'/retailer-registration'; ?>"><?php esc_html_e( 'Sign Up', 'dokan-lite' ); ?></a></li>
     <?php } ?>
 </ul>

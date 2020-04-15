@@ -21,34 +21,21 @@ require_once plugin_dir_path(__FILE__) . 'includes/rest_api/rest_api_functions.p
 require_once plugin_dir_path(__FILE__) . 'includes/products/products_functions.php';
 require_once plugin_dir_path(__FILE__) . 'includes/csv_import/csv_import.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin/admin_functions.php';
-require plugin_dir_path(__FILE__) . 'includes/Registration.php';
-require plugin_dir_path(__FILE__) . 'includes/products/ozh_retailer_packages.php';
+require_once plugin_dir_path(__FILE__) . 'includes/registration.php';
+require_once plugin_dir_path(__FILE__) . 'includes/products/ozh_retailer_packages.php';
+require_once plugin_dir_path(__FILE__) . 'includes/emails/custom_emails.php';
+require_once plugin_dir_path(__FILE__) . 'includes/timers/day_timer.php';
+
+$ozh_custom_emails = new OZH_custom_emails;
+
 if ( is_admin() ) {
 	wp_enqueue_style('ozh-retailer-admin', home_url().'/wp-content/plugins/ozhands_retailers/css/retailer-admin.css');
-	wp_enqueue_script('ozh-retailer-adm', home_url().'/wp-content/plugins/ozhands_retailers/js/admin.js', array('jquery'), '', true );
 }
+wp_enqueue_style('retailer-registration-form', home_url().'/wp-content/plugins/ozhands_retailers/css/retailer-registration-form.css');
 
 // Alex test page
-add_shortcode('alex_test', 'alex_test');
-function alex_test() {
-	// global $wpdb;
-	
-	// $request = "SELECT post_id, meta_value FROM ".$wpdb->prefix."postmeta WHERE meta_key = 'ozh_new_retailer_product' AND meta_value != ''";
-	// $new_api_products = $wpdb->get_results( $request );
-	// foreach ( $new_api_products as $new_api_product ) {
-		// $new_product_data = json_decode( $new_api_product->meta_value );
-		// if ( is_object( $new_product_data ) ) {
-			// echo '<br>'.$new_api_product->post_id.'___';
-			// print_r($new_product_data);
-			// $product = new WC_Product( $new_api_product->post_id );
-			// $product->set_stock_status( $new_product_data->stock_status );
-			// $product->set_stock_quantity( $new_product_data->stock_quantity );
-			// $product->set_sku( $new_product_data->sku );
-			// echo '<br>+++++'.$product->get_id().'++++++'.$product->get_sku();
-			// update_post_meta( $new_api_product->post_id, 'ozh_new_retailer_product', '' );
-		// }
-	// }
-}
+add_shortcode('alex_test', 'ozh_day_timer');
+
 
 register_activation_hook( __FILE__, 'ozhands_retailers_instal' );
 function ozhands_retailers_instal(){
@@ -133,9 +120,20 @@ function ozh_get_attachment_image_attributes( $attr, $attachment, $size ) {
 	return $attr;
 }
 
-/*
-* Set Purchasable false for retailers products
-*/
+/**
+ * Replace link on Sign UP
+ */
+add_filter('dokan_get_template_part', 'ozh_retailer_get_template_part', 10, 2);
+function ozh_retailer_get_template_part( $template, $slug ) {
+    if( $slug == 'global/header-menu' ) {
+        $template = plugin_dir_path(__FILE__) . 'includes/retailer-board/templates/header-menu.php';        
+    }
+    return $template;
+}
+
+/**
+ * Set Purchasable false for retailers products
+ */
 add_filter( 'woocommerce_is_purchasable', 'ozh_hide_add_to_cart_button', 10, 2 );
 function ozh_hide_add_to_cart_button ( $is_purchasable = true, $product ) {
 	
@@ -173,9 +171,59 @@ function ozh_product_meta_start() {
 	}
 }
 
-// woocommerce_after_add_to_cart_quantity
+/**
+ * Creating posts, pages and shortcodes
+ */
+add_action ('init', 'creating_reatiler_posts');
+function creating_reatiler_posts() {
+	if ( !get_page_by_path('retailer-registration') ) {
+		wp_insert_post( array(
+			'post_name'    => 'retailer-registration',
+			'post_content'  => '[retailer_registration]',
+			'post_status'   => 'publish',
+			'post_author'   => 1,
+			'post_type' 	=> 'page',
+			'post_title' 	=> 'Register'
+		) );
+	}
 
-// add_filter( 'dokan_dashboard_nav_common_link', 'test_dashboard_nav_common_link' );
-// function test_dashboard_nav_common_link( $common_links ) {
-// 	return '';
-// }
+	if ( !get_page_by_path('csv-import') ) {
+		wp_insert_post( array(
+			'post_name'    => 'csv-import',
+			'post_content'  => '[csv_import]',
+			'post_status'   => 'publish',
+			'post_author'   => 1,
+			'post_type' 	=> 'page',
+			'post_title' 	=> 'CSV import'
+		) );
+	}
+
+	if ( !get_page_by_path('retailer-packages') ) {
+		wp_insert_post( array(
+			'post_name'    => 'retailer-packages',
+			'post_content'  => '[retailer_packages]',
+			'post_status'   => 'publish',
+			'post_author'   => 1,
+			'post_type' 	=> 'page',
+			'post_title' 	=> 'Retailer Packages'
+		) );
+	}
+
+	$product_id = get_option('retailer-subscription');
+	$product = get_post($product_id);
+	if ( !$product ) {
+		$product_id = wp_insert_post( array(
+			'post_title'    => 'retailer-subscription',
+			'post_content'  => '',
+			'post_status'   => 'publish',
+			'post_author'   => 1,
+			'post_type' 	=> 'product',
+			'meta_input'    => [
+				'_price' => '0',
+				'_stock_status' => 'instock',
+				'_virtual' => 'yes'
+			],
+		) );
+		update_option( 'retailer-subscription', $product_id );		
+	}	
+}

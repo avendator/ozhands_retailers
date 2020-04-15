@@ -38,14 +38,17 @@
                 <div class="product-listing-top dokan-clearfix">
                     <?php dokan_product_listing_status_filter(); ?>
 
-                    <?php if ( dokan_is_seller_enabled( get_current_user_id() ) ): ?>
+                    <?php $user_id = get_current_user_id();
+                    if ( dokan_is_seller_enabled( $user_id ) ): ?>
                         <span class="dokan-add-csv-link">
-                            <?php if ( current_user_can( 'dokan_add_product' ) ): ?>
-                                <i class="fa fa-briefcase">&nbsp;</i>
-                                <a href="<?php echo home_url().'/csv-import' ?>">
-                                    <input type="button" class="dokan-btn-theme" id="upload-csv-btn" value="Upload new CSV">
-                                </a>
-                            <?php endif ?>
+                            <?php if ( current_user_can( 'dokan_add_product' ) ): 
+                                if ( get_user_meta( $user_id, 'ozh_retailer_store_block', true ) != 'block' && ozh_get_retailer_product_limit( $user_id ) != 0 ): ?>
+                                    <i class="fa fa-briefcase">&nbsp;</i>
+                                    <a href="<?php echo home_url().'/csv-import' ?>">
+                                        <input type="button" class="dokan-btn-theme" id="upload-csv-btn" value="Upload new CSV">
+                                    </a>
+                                <?php endif;      
+                            endif; ?>
 
                             <?php
                                 do_action( 'dokan_after_add_product_btn' );

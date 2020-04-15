@@ -3,9 +3,6 @@
 /**
  * Registration new Retailer
  */
-// add_action('wp_ajax_'.'new_retailer_registration', 'new_retailer_registration');
-// add_action('wp_ajax_'.'new_retailer_registration', 'new_retailer_registration');
-
 function new_retailer_registration() {
 
 	$userdata = array(
@@ -30,16 +27,4 @@ function new_retailer_registration() {
 	} else {
 		return $user_id->get_error_message();
 	} 
-}
-
-add_shortcode('retailer_registration', 'retailer_registration');
-function retailer_registration() {
-
-	if( isset($_POST['retailer_register']) ) {
-		$register = new_retailer_registration();
-		if ( $register === true ) {
-			echo '<script>window.location.assign("/dashboard");</script>';
-		}
-	}	
-	require_once plugin_dir_path( __FILE__ ).'retailer-board/templates/registration-form.php';
 }

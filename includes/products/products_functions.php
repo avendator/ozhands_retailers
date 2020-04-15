@@ -5,7 +5,7 @@
 */
 
 /*
-* Add product to retailer list by Product ID (ID from retailer site)
+* Add product to retailer list by Retailer Product ID
 */
 function ozh_add_product( $user_id, $product_data ) {
 	
@@ -69,7 +69,7 @@ function ozh_add_product( $user_id, $product_data ) {
 	update_post_meta( $product_id, 'ozh_single_product_url', $product_data->single_product_url );
 	
 	// Retailer Product ID
-	update_post_meta( $product_id, '_original_id', $product_data->retailer_product_id );
+	update_post_meta( $product_id, '_original_id', ozh_create_original_id( $user_id, $product_data->retailer_product_id ) );
 
 	// Product data for create additional Woocommerce postmeta in function ozhands_add_data_to_new_api_products
 	// (in this moment Woocommerce functions not active). 
@@ -85,7 +85,76 @@ function ozh_add_product( $user_id, $product_data ) {
 }
 
 /*
-* Delete product from retailer list by Product SKU
+* Update product to retailer list by Retailer Product ID
+*/
+function ozh_update_product( $user_id, $product_data ) {
+	
+	$user_status = ozh_get_user_status( $user_id );
+	
+	$action_data['notice_user'] = $user_status['notice'];
+	
+	if ( $user_status['status'] == 'not_active' || $user_status['status'] == 'reached' ) {
+		$action_data['notice_type'] = 'error';
+		$action_data['notice_text'] = "Product <strong>".$product_data->name."</strong> not updated on the Ozhands list";
+
+		wp_send_json_success( $action_data );
+	}
+	
+	// Check product in list
+	$product_id = ozh_is_product_in_list( $user_id, $product_data->retailer_product_id );
+	if ( !$product_id ) {
+		$action_data['notice_type'] = 'error';
+		$action_data['notice_text'] = "Product <strong>".$product_data->name."</strong> not exist in the Ozhands list";
+		wp_send_json_success( $action_data );
+	}
+	
+	// Product data from API Request
+	// Main data
+	$data = [
+        'ID'             	 => $product_id,
+		'post_title'         => $product_data->post_title,
+        'post_content'       => $product_data->post_content,
+        'post_expert'		 => $product_data->post_expert,
+		'post_name'	 		 => $product_data->post_name,
+		'guid'				 => $product_data->guid,
+    ];
+	wp_update_post( wp_slash( $data ) );
+
+	// Product prices
+	update_post_meta( $product_id, '_regular_price', $product_data->regular_price );
+	update_post_meta( $product_id, '_sale_price', $product_data->sale_price );
+	update_post_meta( $product_id, '_price', $product_data->price );
+	
+	// Add additional product data
+	// Tags
+	wp_set_object_terms($product_id, $product_data->tag_names, 'product_tag');
+	
+	// Categories
+	wp_set_object_terms($product_id, $product_data->category_names, 'product_cat');
+
+	
+	// Real image URL on retail site
+	// update_post_meta( $product_id, 'ozh_image_url', $product_data->image_url );
+	update_post_meta( $product_id, 'ozh_image_src', $product_data->image_src );
+	update_post_meta( $product_id, 'ozh_image_srcset', $product_data->image_srcset );
+	
+	// Real image gallery URLs on retail site
+	update_post_meta( $product_id, 'ozh_gallery_image_urls', json_encode( $product_data->gallery_image_urls ) );
+	
+	// Single Product URL
+	update_post_meta( $product_id, 'ozh_single_product_url', $product_data->single_product_url );
+	
+	// SKU
+	update_post_meta( $product_id, '_sku', $product_data->sku );
+	
+	// Product successfully added Notice
+	$action_data['notice_type'] = 'success';
+	$action_data['notice_text'] = "Product <strong>".$product_data->name."</strong> successfully updated in your Ozhands store | Used ".ozh_get_retailer_product_number( $user_id )." positions";
+	wp_send_json_success( $action_data );
+}
+
+/*
+* Delete product from retailer list by Retailer Product ID
 */
 function ozh_delete_product( $user_id, $product_id ) {
 	
@@ -119,7 +188,7 @@ function ozh_delete_product( $user_id, $product_id ) {
 	// Get Product ID
 	if ( $products = $product_query->posts ) {
 		foreach ( $products as $product ) {
-			if ( get_post_meta( $product->ID, '_original_id', true ) == $product_id ) {
+			if ( get_post_meta( $product->ID, '_original_id', true ) == ozh_create_original_id( $user_id, $product_id ) ) {
 				$product_id = $product->ID;
 				$product_name = $product->post_title;
 				break;
@@ -129,7 +198,12 @@ function ozh_delete_product( $user_id, $product_id ) {
 	
 	// Product delete
 	if ( $product_id ) {
-		dokan()->product->delete( $product_id, true );
+		global $wpdb;
+		
+		$wpdb->delete( $wpdb->prefix.'posts', array( 'ID' => $product_id ) );
+		$wpdb->delete( $wpdb->prefix.'postmeta', array( 'post_id' => $product_id ) );
+		
+		// dokan()->product->delete( $product_id, true );
 		$action_data['notice_type'] = 'warning';
 		$action_data['notice_text'] = "Product <strong>".$product_name."</strong> successfully deleted from your Ozhands store | Used ".ozh_get_retailer_product_number( $user_id );
 		wp_send_json_success( $action_data );
@@ -176,9 +250,9 @@ function ozh_get_products_list( $user_id ) {
 	$action_data['notice_text'] = '';
 	if ( $products = $product_query->posts ) {
 		foreach ( $products as $product ) {
-			$etailer_product_id = get_post_meta( $product->ID, '_original_id', true );
-			if ( $etailer_product_id && $etailer_product_id != '' ) {
-				$action_data['notice_text'] .= ','.$etailer_product_id;
+			$retailer_product_id = ozh_get_retailer_product_id( (int)get_post_meta( $product->ID, '_original_id', true ) );
+			if ( $retailer_product_id ) {
+				$action_data['notice_text'] .= ','.$retailer_product_id;
 			}
 		}
 		$action_data['notice_text'] = substr( $action_data['notice_text'], 1 );
@@ -239,8 +313,8 @@ function ozh_is_product_in_list( $user_id, $product_id ) {
 	
 	if ( $products = $product_query->posts ) {
 		foreach ( $products as $product ) {
-			if ( $product_id == get_post_meta( $product->ID, '_original_id', true ) ) {
-				return TRUE;
+			if ( $product_id == ozh_get_retailer_product_id( get_post_meta( $product->ID, '_original_id', true ) ) ) {
+				return $product->ID;
 			}
 		}
 	}
@@ -248,15 +322,10 @@ function ozh_is_product_in_list( $user_id, $product_id ) {
 }
 
 /**
- * @param integer $user_id
- * @param integer $package_id (Retailer Package)
- * @return mixed:
- * 				integer (quantity products active subcription)
- * 				string "unlimited" if quantity unlimited
+ * return array of orders id's by user id
  */
-function ozh_get_retailer_product_limit( $user_id, $package_id = 0 ) {
-	
-    $product_limit = 0;
+function ozh_get_orders_ids( $user_id ) {
+
     $customer_orders = get_posts(array(
         'numberposts' => -1,
         'meta_key' => '_customer_user',
@@ -271,50 +340,53 @@ function ozh_get_retailer_product_limit( $user_id, $package_id = 0 ) {
 
 	    foreach ($customer_orders as $customer_order) {
 	        $order = wc_get_order($customer_order);
-	        $order_array[] = [
-	            'ID' => $order->get_id(),
-	            'Date' => $order->get_date_paid()->date_i18n('d-m-Y'),          
-	        ];
+	        $order_array[] = ['ID' => $order->get_id()];
 	    }
 	}
+	return $order_array;
+}
+
+/**
+ * @param integer $user_id
+ * @param integer $package_id (Retailer Package)
+ * @return mixed:
+ * 				integer (quantity products active subcription)
+ * 				string "unlimited" if quantity == unlimited
+ */
+function ozh_get_retailer_product_limit( $user_id, $package_id = 0 ) {
+	
+    $product_limit = 0;
+	$order_array = ozh_get_orders_ids( $user_id );
     if ( $order_array ) {
+    	$today = strtotime( wp_date('d-m-Y') );
 
-        foreach ( $order_array as $order ) {
-            $start = explode('-', $order['Date']);
-            $finish = array();
-            $this_month = new DateTime('last day of this month');
-            $this_month = explode( '-', $this_month->format('d-m-Y') );
-
-            $next_month = new DateTime('last day of next month');
-            $next_month = explode( '-', $next_month->format('d-m-Y') );
-
-            $finish[0] = $start[0];
-            $finish[1] = $next_month[1];
-            $finish[2] = $next_month[2];
-
-            if ( $start[0] == $this_month[0] ) {
-                $finish[0] = $next_month[0];
+    	$finish_dates = [];
+    	if ( $package_id ) {
+	        foreach ( $order_array as $order ) {	            
+				if ( get_post_meta( $order['ID'], 'package_id', true ) == $package_id ) {
+		        	$finish_dates[] = [
+		        		'finish_date' => get_post_meta( $order['ID'], 'finish_date', true ),
+		        		'order_id' => $order['ID']
+	        		];				
+				}
             }
-            $today = strtotime( date('d-m-Y') );
-            $finish_date = strtotime( implode( '-', $finish) );
-
-            if ( $today < $finish_date ) {
-                if ( $package_id ) {
-                    if ( get_post_meta( $order['ID'], 'package_id', true ) == $package_id ) {
-                        $product_limit = get_post_meta( $order['ID'], 'package_product_limit', true );
-                        $product_limit = $product_limit == 'unlimited' ? 'unlimited' : (int)$product_limit;
-                        return $product_limit;
-                    }  
-                }
-                elseif ( get_post_meta( $order['ID'], 'package_product_limit', true ) == 'unlimited' ) {
-                	$product_limit = 'unlimited';
-                	return $product_limit;
-                }
-                else {
-                	$product_limit += (int)get_post_meta( $order['ID'], 'package_product_limit', true );
-                }      
-            }
+	    }
+	    else {
+	        foreach ( $order_array as $order ) {
+	        	$finish_date = get_post_meta( $order['ID'], 'finish_date', true );
+	        	if ( $finish_date ) {	            
+		        	$finish_dates[] = [
+		        		'finish_date' => $finish_date,
+		        		'order_id' => $order['ID']
+	        		];				
+	            }
+        	}
         }
+    	$finish_date = end($finish_dates);
+    	if ( $today < $finish_date['finish_date'] ) {
+    		$product_limit = get_post_meta( $finish_date['order_id'], 'package_product_limit', true );
+    		$product_limit = $product_limit == 'unlimited' ? 'unlimited' : (int)$product_limit;
+    	}
     }
     return $product_limit;
 }
@@ -388,14 +460,14 @@ function ozh_get_user_status( $user_id ) {
 	$retailer_product_limit = ozh_get_retailer_product_limit( $user_id );
 	
 	// Retailer don't have active package
-	if ( !$retailer_product_limit && !$user_status ) {
+	if ( !$retailer_product_limit && $retailer_product_limit != 'unlimited' ) {
 		
 		$user_status['status'] = 'not_active';
 		$user_status['notice'] = "<span style='color: red;'> | You don't have active retailer package in Ozhands </span>";
 	}
 	
 	// Retailer packege has been reached
-	if ( ozh_get_retailer_product_number( $user_id ) >= $retailer_product_limit && !$user_status ) {
+	if ( ozh_get_retailer_product_number( $user_id ) >= (int)$retailer_product_limit && $retailer_product_limit != 'unlimited' ) {
 		
 		$user_status['status'] = 'reached';
 		$user_status['notice'] = "<span style='color: red;'> | Your Ozhands limit ".$retailer_product_limit." products has been reached</span>";
@@ -410,7 +482,7 @@ function ozh_get_user_status( $user_id ) {
 	// Retailer packege time limit < 3 days
 	if ( $user_status['status'] == 'active' ) {
 		if ( $time_limit = ozh_get_retailer_time_limit( $user_id ) ) {
-			$user_status['notice'] .= "<span style='color: red;'> | Your Ozhands packege ends in ".$time_limit." days</span>";
+			$user_status['notice'] .= "<span style='color: red;'> | Your Ozhands package ends in ".$time_limit." days</span>";
 		}
 	}
 	
@@ -419,7 +491,77 @@ function ozh_get_user_status( $user_id ) {
 	return $user_status;
 }
 
-// Get Retailer time limit. Days to package ended
+/**
+ * return array of retailer package data
+ */
+function ozh_get_retailer_packages_data( $user_id ) {
+
+	$packages_data = [];
+    $order_array = ozh_get_orders_ids( $user_id );
+
+    if ( $order_array ) {
+        foreach ( $order_array as $order ) {
+            $package_id = get_post_meta( $order['ID'], 'package_id', true );
+            if ( $package_id ) {               
+                $packages_data[] = [
+                	'package_id' => $package_id,
+                	'finish_date' => get_post_meta( $order['ID'], 'finish_date', true ),
+                	'start_date' => get_post_meta( $order['ID'], 'start_date', true ),
+                	'order_id' => $order['ID']
+                ];              
+            }
+        }        
+    }
+    return $packages_data;
+}
+
+/**
+ * return active retailer package id
+ */
+function ozh_get_retailer_package_id( $user_id ) {
+
+	$packages_data = ozh_get_retailer_packages_data( $user_id );
+
+	if ( $packages_data ) {
+		$package_id = end($packages_data);
+		$package_id = $package_id['package_id'];
+	}
+	return $package_id;
+}
+
+/**
+ * Get Retailer time limit. Days to package ended
+ */
 function ozh_get_retailer_time_limit( $user_id ) {
-	return 3;
+
+	$time = 0;
+	$packages_data = ozh_get_retailer_packages_data( $user_id );
+
+	if ( $packages_data ) {
+		$today = strtotime( wp_date('d-m-Y') );
+		$finish_date = end($packages_data);
+
+        if ( $today < $finish_date['finish_date'] ) {
+            $time = ( $finish_date['finish_date'] - $today ) / 86400;
+        } 
+	}
+	return (int)$time;
+}
+
+/**
+ * Create original id 
+ */
+function ozh_create_original_id( $user_id, $retailer_product_id ) {
+
+	$original_id = 1000000 + (int)$user_id + ( (int)$retailer_product_id * 10000000 );
+	return $original_id;
+}
+
+/**
+ * Get retailer product id 
+ */
+function ozh_get_retailer_product_id( $original_id ) {
+
+	$retailer_product_id = (int)($original_id / 10000000);
+	return $retailer_product_id;
 }

@@ -4,7 +4,7 @@
  * Importing of Products - widget
  */
 ?>
-<?php if ($_GET['percentage'] && $_GET['products-imported']) : ?>
+<?php if ( $_GET['percentage'] ) : ?>
 	<div class="dashboard-widget sells-graph">
 	    <div class="widget-title"> <i class="fa fa-briefcase"></i> <?php echo 'Importing of Products'; ?></div>
 			<ul class="list-unstyled list-count">

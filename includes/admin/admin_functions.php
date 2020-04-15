@@ -100,20 +100,22 @@ function ozh_retailer_store_block() {
  */
 add_filter( 'manage_users_columns', 'ozh_users_add_column', 30, 1 );
 function ozh_users_add_column( $columns ) {
-	$columns['product_limit'] = 'Limit';
+	$columns['product_limit'] = 'Package';
 	$columns['product_number'] = 'Number';
     return $columns;
 }
 
 add_filter( 'manage_users_custom_column', 'ozh_users_custom_column', 10, 3 );
 function ozh_users_custom_column( $output, $column_name, $user_id ) {
-	
+	$retailer_pack_id = ozh_get_retailer_package_id( $user_id );
 	$user_meta = get_userdata( $user_id );
+
 	if ( $user_meta->roles[0] == 'retailer' ) {
 		if ($column_name == 'product_limit') {
-			$output = ozh_get_retailer_product_limit( $user_id );
+			$output .= '<span class="ret-row">'.get_the_title( $retailer_pack_id ).'</span>';
+			$output .= '<span class="ret-row">'.ozh_get_retailer_product_limit( $user_id ). '</span>';
 			if ( get_user_meta( $user_id, 'ozh_retailer_store_block', true ) != 'un_block' ) {
-				$output .= ' &#9940;';
+				$output .= '<span class="ret-row block-circle">&#8226;</span>';
 			}
 		}
 		if ($column_name == 'product_number') {
@@ -167,21 +169,17 @@ function ozh_add_form_after_editor( $post ) {
 /**
  * save or update meta-data of post type "package"
  */
-add_action('wp_ajax_'.'update_retailer_package_meta', 'update_retailer_package_meta');
-add_action('wp_ajax_'.'update_retailer_package_meta', 'update_retailer_package_meta');
-function update_retailer_package_meta() {
-	$quantity = $_POST['data']['quantity'];
-	$price = $_POST['data']['price'];
-	$trial = $_POST['data']['trial'];
-	$post_id = $_POST['data']['postID'];
+add_action('publish_package', 'update_retailer_package_meta');
+function update_retailer_package_meta( $post_id ) {
+
+	$quantity = trim( $_POST['quantity'] );
+	$price = trim( $_POST['price'] );
+	$trial = trim( $_POST['trial'] );
 	$quantity = $quantity === 'unlimited' ? 'unlimited' : (int)( $quantity );
 
 	update_post_meta( $post_id, 'quantity_of_products', $quantity );
 	update_post_meta( $post_id, 'price', (int)( $price ) );
 	update_post_meta( $post_id, 'trial', (int)( $trial ) );
-	$data = array( 'quantity' => $quantity, 'price' => $price, 'trial' => $trial );
-	echo json_encode($data);
-	die();
 }
 
 /**
@@ -227,4 +225,13 @@ function add_packages_column_data( $column, $post_id ) {
 	if ($column == 'trial') {
 		echo get_post_meta($post_id, 'trial', true);
     }
+}
+
+/**
+ * Delete Retailer Product ID from Product mets before Product delete
+ */
+add_action( 'wp_trash_post', 'ozh_dete_original_id' );
+add_action( 'before_delete_post', 'ozh_dete_original_id' );
+function ozh_dete_original_id( $post_id ) {
+	delete_post_meta( $post_id, '_original_id' );
 }
