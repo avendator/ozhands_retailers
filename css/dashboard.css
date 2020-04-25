@@ -3,13 +3,13 @@
 ----------------------------------------------------*/
 /** Widgets **/
 .dokan-add-csv-link {
-    width: 150px;
+	width: 150px;
     float: right;
     text-align: right;
     position: relative;
 }
 #upload-csv-btn {
-    height: 35px;
+	height: 35px;
     border-radius: 4px;
     line-height: normal;
     padding-left: 30px;
@@ -22,8 +22,8 @@ span.dokan-add-csv-link > i.fa.fa-briefcase {
     top: 16%;
     color: #fff;
 }
-article.dashboard-content-area .subscriptions-pack > a,
-.dokan-dashboard .dokan-dashboard-content article.dashboard-content-area .dashboard-widget.big-counter .retailer-pack > a {
+.dokan-dashboard .dokan-dashboard-content article.dashboard-content-area .dashboard-widget.big-counter .retailer-pack > a,
+a.connection-link {
     background-color: #f05025;
     color: #fff;
     margin: 4px 0 4px 0;
@@ -33,12 +33,27 @@ article.dashboard-content-area .subscriptions-pack > a,
     width: 90%;
     font-size: 16px;    
 }
+.choose-subscription {
+    font-size: 130%;
+    color: red;
+    text-decoration: underline;
+}
+.connection-link-cont {
+    text-align: center;
+}
 span.title,
 span.count {
     color: #f05025;
 }
 .subscriptions-pack {
     text-align: center;
+}
+.learn-more {
+    text-decoration: underline;
+    font-size: 110%;  
+}
+#add-info {
+    padding: 5px;
 }
 
 /** Upload CSV Form **/

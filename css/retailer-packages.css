@@ -36,7 +36,8 @@
     margin: 0 0 0 -80px;
 }
 .buy-package,
-.renewal {
+.renewal,
+.buy-free {
     position: absolute;
     padding: 5px 10px;
     color: white;
@@ -47,8 +48,9 @@
 .buy-package {
     right: 10%;   
 }
-.renewal {
-    right: 0%;
+.renewal,
+.buy-free {
+    right: 5%;
 }
 span.trial {
     display: block;

@@ -47,7 +47,7 @@
                                     <a href="<?php echo home_url().'/csv-import' ?>">
                                         <input type="button" class="dokan-btn-theme" id="upload-csv-btn" value="Upload new CSV">
                                     </a>
-                                <?php endif;      
+                                <?php endif;     
                             endif; ?>
 
                             <?php

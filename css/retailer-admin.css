@@ -6,10 +6,12 @@ input.adm-retailer-input {
     width: 250px;
 }
 span.ret-row {
-    display: block;
+	display: block;
     margin-bottom: 5px;
 }
 .block-circle {
     font-size: 50px;
     color: red;
 }
+
+

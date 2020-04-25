@@ -10,7 +10,7 @@
     $banner_id      = ! empty( $profile_info['banner'] ) ? $profile_info['banner'] : 0;
     $storename      = isset( $profile_info['store_name'] ) ? $profile_info['store_name'] : '';
     $store_ppp      = isset( $profile_info['store_ppp'] ) ? $profile_info['store_ppp'] : '';
-    $phone          = isset( $profile_info['phone'] ) ? $profile_info['phone'] : '';
+    $phone          = get_user_meta($current_user, 'billing_phone', true);
     $show_email     = isset( $profile_info['show_email'] ) ? $profile_info['show_email'] : 'no';
     $show_more_ptab = isset( $profile_info['show_more_ptab'] ) ? $profile_info['show_more_ptab'] : 'yes';
 
@@ -27,11 +27,12 @@
     $dokan_category = isset( $profile_info['dokan_category'] ) ? $profile_info['dokan_category'] : '';
     $enable_tnc     = isset( $profile_info['enable_tnc'] ) ? $profile_info['enable_tnc'] : '';
     $store_tnc      = isset( $profile_info['store_tnc'] ) ? $profile_info['store_tnc'] : '';
+    $user = get_user_by('id', $current_user);
+    $storename       = sanitize_text_field( $user->user_login);
 
     if ( is_wp_error( $validate ) ) {
         $posted_data = wp_unslash( $_POST ); // WPCS: CSRF ok, Input var ok.
 
-        $storename       = sanitize_text_field( $posted_data['dokan_store_name'] );
         $map_location    = sanitize_text_field( $posted_data['location'] );
         $map_address     = sanitize_text_field( $posted_data['find_address'] );
         $posted_address  = sanitize_text_field( $posted_data['dokan_address'] );
@@ -116,7 +117,7 @@
             <label class="dokan-w3 dokan-control-label" for="dokan_store_name"><?php esc_html_e( 'Store Name', 'dokan-lite' ); ?></label>
 
             <div class="dokan-w5 dokan-text-left">
-                <input id="dokan_store_name" required value="<?php echo esc_attr( $storename ); ?>" name="dokan_store_name" placeholder="<?php esc_attr_e( 'store name', 'dokan-lite' ); ?>" class="dokan-form-control" type="text">
+                <input id="dokan_store_name" required value="<?php echo esc_attr( $storename ); ?>" name="dokan_store_name" placeholder="<?php esc_attr_e( 'store name', 'dokan-lite' ); ?>" class="dokan-form-control" type="text" readonly>
             </div>
         </div>
 

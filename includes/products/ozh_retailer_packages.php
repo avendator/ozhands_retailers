@@ -3,21 +3,37 @@
 /**
  * Display of retailer packages on page "Retailer Packages"
  */
-add_shortcode('retailer_packages', 'show_retailer_packages');
-function show_retailer_packages() {
+add_shortcode('retailer_packages', 'ozh_show_retailer_packages');
+function ozh_show_retailer_packages() {
 	if ( is_user_logged_in() ) {
 		$cuser = wp_get_current_user();
 		if ( $cuser->roles[0] == 'retailer' || $cuser->roles[0] == 'administrator' ) {
-			wp_enqueue_style('ozh-retailer-packages', home_url().'/wp-content/plugins/ozhands_retailers/css/retailer-packages.css');
 			wp_enqueue_script('package-purchase', home_url().'/wp-content/plugins/ozhands_retailers/js/package-purchase.js', array('jquery'), '', true );
-
-			$query = new WP_Query( array(
+			// if the retailer already bought the package before 
+			$packages_data = ozh_get_retailer_packages_data( $cuser->ID );
+			$trial = ozh_get_trial_date( $cuser->ID );
+			if ( $packages_data || $trial ) {
+				$meta = array(
+					array(
+						'key'     => 'trial',
+						'value'   => '0'
+					)					
+				);
+				// if hie did not yet ...
+			} else {
+				$meta = array(
+					array(
+						'key'     => 'price',
+					)					
+				);
+			}
+			$args = array(
 				'post_type' => 'package',
-				'orderby' => 'meta_value',
-				'meta_key' => 'price',
-				'order'    => 'ASC',
-				'posts_per_page' => '5'
-			) );
+				'orderby'   => 'meta_value',
+				'order'     => 'ASC',
+				'meta_query' => $meta			
+			);					
+			$query = new WP_Query( $args );
 
 			$attr = array(
 				'class' => "attachment-woocommerce_thumbnail size-woocommerce_thumbnail",
@@ -26,8 +42,10 @@ function show_retailer_packages() {
 			$attach_id = get_option( 'ozh_clear_image_id' );
 			$src = wp_get_attachment_image_src( $attach_id);
 
-			while( $query->have_posts() ):
-				$query->the_post(); ?>
+			while( $query->have_posts() ): ?>
+				<?php $query->the_post();
+				$trial = get_post_meta( get_the_ID(), 'trial', true );
+				?>
 				<div class="retailer-package-container">
 					<?php
 					the_title( '<h2 class="package-title">', '</h2>' );
@@ -45,7 +63,7 @@ function show_retailer_packages() {
 
 					<div class="ozh-packages-content">
 						<?php echo get_the_content();
-							echo '<span class="trial">Free: '.get_post_meta( get_the_ID(), 'trial', true ).' Days</span>';
+							echo '<span class="trial">Free: '.$trial.' Days</span>';
 						?>				
 					</div><!-- .custom-entry-content -->
 
@@ -54,20 +72,25 @@ function show_retailer_packages() {
 							<?php echo get_post_meta( get_the_ID(), 'price', true ) .'$'; ?>							
 						</span>
 						<?php
+						// if the retailer already bought the package before 
 						if ( ozh_get_retailer_product_limit( $cuser->ID , get_the_ID() ) !== 0 ) { ?>
-							<a href="?checkout" rel="nofollow" data-renew="renewal" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
+							<a href="?checkout" rel="nofollow" data-renewal="renewal" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
 								<span class="renewal">Renewal</span>
 							</a>
-						<?php } else {										
-							if ( get_post_meta( get_the_ID(), 'trial', true ) ) { ?>
-							<a href="?checkout" rel="nofollow" data-trial="trial" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
-								<span class="buy-package">Start Free</span>
-							<?php 
-							}
-							else { ?>
-							<a href="?checkout" rel="nofollow" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
-								<span class="buy-package">Buy</span>
-							<?php 
+						<?php } else {	
+							if ( $packages_data ) { ?>
+								<a href="?checkout" rel="nofollow" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
+									<span class="buy-package">Buy</span>
+								<?php 
+							} // if hie did not yet ...							 
+							else {
+								if ( $trial ) { ?>
+									<a href="?checkout" rel="nofollow" data-trial="<?= $trial; ?>" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
+										<span class="buy-free">Start Free</span>
+								<?php } else { ?>
+									<a href="?checkout" rel="nofollow" data-package-id="<?= get_the_ID(); ?>" class="link-buy-package">
+										<span class="buy-package">Buy</span>
+								<?php }
 							}
 						} ?>
 						</a>
@@ -75,17 +98,6 @@ function show_retailer_packages() {
 				</div>
 		 
 			<?php endwhile; ?>
-			
-			<div class="pagination-container">
-				<?php
-				echo paginate_links( array(
-					'prev_next' => true,
-					'prev_text' => __( '&laquo; Previous' ),
-					'next_text' => __( 'Next &raquo;' ),
-					'total' => $query->max_num_pages,
-					'current' => $paged,
-				) ); ?>
-			</div>
 			
 			<?php wp_reset_postdata();
 		}
@@ -95,27 +107,37 @@ function show_retailer_packages() {
 /**
  * set session-data for Woocommerce cart & add product ID to cart
  */
-add_action('wp_ajax_'.'buy_retailer_package', 'buy_retailer_package');
-add_action('wp_ajax_'.'buy_retailer_package', 'buy_retailer_package');
-function buy_retailer_package() {
+add_action('wp_ajax_'.'buy_retailer_package', 'ozh_buy_retailer_package');
+add_action('wp_ajax_'.'buy_retailer_package', 'ozh_buy_retailer_package');
+function ozh_buy_retailer_package() {
 	$package_id = $_POST['data']['package_id'];
 	$renewal = $_POST['data']['renewal'];
 	$trial = $_POST['data']['trial'];
 	$product_name = get_the_title( $package_id );
+	$user = get_current_user_id();
 	if ( $trial ) {
-		$trial = get_post_meta( $package_id, 'trial', true);
+		$start = strtotime( wp_date('d-m-Y') );
+		$trial = $trial * 86400;
+		$finish_date = $start + $trial;
+		$limit = get_post_meta( $package_id, 'quantity_of_products', true );
+	    update_user_meta( $user, 'ozh_trial_start_date', $start );
+	    update_user_meta( $user, 'ozh_trial_finish_date', $finish_date );
+	    update_user_meta( $user, 'ozh_package_id', $package_id );
+	    update_user_meta( $user, 'ozh_package_product_limit', $limit );
+		echo 'thank-you-page';
+		die();
+	}	
+	else {
+		$price = get_post_meta( $package_id, 'price', true );
 	}
-	$price = get_post_meta( $package_id, 'price', true );
 	WC()->session->cleanup_sessions();
-	WC()->session->set('trial', $trial);
-	WC()->session->set('package_id', $package_id);
 	WC()->session->set('package_price', $price);
+	WC()->session->set('package_id', $package_id);
 	WC()->session->set('package_name', $product_name);
-	if ( !$renewal ) {
-		WC()->session->set('package_renewal', $renewal);
-	}
+	WC()->session->set('package_renewal', $renewal);
+	WC()->session->set('package_trial', $trial);
 	WC()->cart->empty_cart();
-	$product_id = get_option('retailer-subscription');
+	$product_id = get_option('ozh_retailer_subscription');
 	WC()->cart->add_to_cart($product_id, 1);
 
 	echo 'checkout';
@@ -125,11 +147,11 @@ function buy_retailer_package() {
 /**
  * get the price of retailer package
  */
-add_action('woocommerce_get_price','retailer_get_price', 10, 2);
-function retailer_get_price( $price, $product ) {
+add_action('woocommerce_get_price','ozh_retailer_get_price', 10, 2);
+function ozh_retailer_get_price( $price, $product ) {
 
 	$current_user = wp_get_current_user();
-	$product_id = get_option('retailer-subscription');
+	$product_id = get_option('ozh_retailer_subscription');
 	if ( $current_user->roles[0] == 'retailer' && $product->id == $product_id && WC()->session->get('package_price') ) {
 		return WC()->session->get('package_price');
 	}
@@ -141,8 +163,8 @@ function retailer_get_price( $price, $product ) {
 /**
  * change the name of retailer package in the cart
  */
-add_action( 'woocommerce_before_calculate_totals', 'retailer_cart_items_prices', 10, 1 );
-function retailer_cart_items_prices( $cart ) {
+add_action( 'woocommerce_before_calculate_totals', 'ozh_retailer_cart_items_prices', 10, 1 );
+function ozh_retailer_cart_items_prices( $cart ) {
 
     if ( is_admin() && ! defined( 'DOING_AJAX' ) )
         return;
@@ -168,8 +190,8 @@ function retailer_cart_items_prices( $cart ) {
 /**
  * adding package ID & subscription limit (retailer package) to order meta-data
  */
-add_action('woocommerce_checkout_create_order', 'before_checkout_create_order', 20, 2);
-function before_checkout_create_order( $order, $data ) {
+add_action('woocommerce_checkout_create_order', 'ozh_before_checkout_create_order', 20, 2);
+function ozh_before_checkout_create_order( $order, $data ) {
 
 	$package_id = WC()->session->get('package_id');
 	$limit = get_post_meta( $package_id, 'quantity_of_products', true );
@@ -178,10 +200,14 @@ function before_checkout_create_order( $order, $data ) {
 }
 
 /**
- * adding to user meta "finish_date" and "package_renewal" if it is a renewal of package
+ * adding to user meta "start_date / finish_date" and "package_renewal" if it is a renewal of package
  */
 add_action( 'woocommerce_payment_complete', 'ozh_payment_complete' );
 function ozh_payment_complete( $order_id ) {
+
+	$user = get_current_user_id();
+	// if the retailer already bought the trial package before
+	$trial = ozh_get_trial_date( $user );
 
 	$start = wp_date('d-m-Y');
     $start = explode('-', $start);
@@ -199,27 +225,22 @@ function ozh_payment_complete( $order_id ) {
     if ( $start[0] == $this_month[0] ) {
         $finish[0] = $next_month[0];
     }
+    // start date in milliseconds (the paid-day)
     $start = strtotime( implode( '-', $start) );
     $finish = strtotime( implode( '-', $finish) );
     // one month active of subscription in milliseconds
     $finish = $finish - $start;
+    // end date in milliseconds
+    $finish_date = $finish + $start;
+    // all orders id's by user id
+    $order_array = ozh_get_orders_ids( $user );
 
-	$trial = WC()->session->get('trial');
-	if ( $trial ) {
-		$start = strtotime( wp_date('d-m-Y') );
-		$trial = $trial * 86400;
-		$finish_date = $start + $trial + $finish;
-	}
-	else {
-	    // end date in milliseconds
-	    $finish_date = $finish + $start;
-
+	if ( $order_array ) {
+	    $finish_dates = [];
 	    $renewal = WC()->session->get('package_renewal');
+
 		if ( $renewal ) {
 			$package_id = WC()->session->get('package_id');
-			// all orders id's by user id
-		    $order_array = ozh_get_orders_ids( get_current_user_id() );
-		    $finish_dates = [];
 
 	        foreach ( $order_array as $order ) {
 
@@ -232,12 +253,32 @@ function ozh_payment_complete( $order_id ) {
 		    $finish_date = $finish_dates[count($finish_dates) -2];
 		    // the last date action of previos subscription + one month of the next action
 		    $finish_date = $finish_date['finish_date'] + $finish;
-		    // end of previous subscription
-		    $start = $finish_date['finish_date'];
 
 			update_post_meta( $order_id, 'package_renewal', $renewal );		
 		}
+		else {
+	        foreach ( $order_array as $order ) {
+	        	// if this not first purchase of package
+				if ( get_post_meta( $order['ID'], 'package_id', true ) ) {
+		        	$finish_dates[] = [
+		        		'finish_date' => get_post_meta( $order['ID'], 'finish_date', true )
+	        		];				
+				} // if it's first...
+				else {
+					$finish_date = $start + $finish;
+				}
+			}
+		} // if is array not empty
+		if ( !$finish_date ) {
+			$finish_date = $finish_dates[count($finish_dates) -2];
+	        if ( $start < $finish_date['finish_date'] ) {
+	            $finish_date = ( $finish_date['finish_date'] - $start ) + $start + $finish;
+	        } // if it's first purchase of package
+	        else {
+	        	$finish_date = $start + $finish;
+	        }			
+		}
 	}
     update_post_meta( $order_id, 'start_date', $start );
-    update_post_meta( $order_id, 'finish_date', $finish_date );
+    update_post_meta( $order_id, 'finish_date', $finish_date + $trial );
 }

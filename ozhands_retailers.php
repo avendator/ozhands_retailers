@@ -4,17 +4,14 @@
  *
  * @wordpress-plugin
  * Plugin Name:       Ozhands Retailers
- * Description:       Plugin by https://www.ozhands.com.au/ to work with retaikers
+ * Description:       Plugin by https://www.ozhands.com.au/ to work with retailers
  * Version:           1.0.0
  * Author:            upsite.top
  * Author URI:        /team
  */
  
-// require_once plugin_dir_path(__FILE__) . 'includes/admin_functions.php';
-// require_once plugin_dir_path(__FILE__) . 'includes/requests_functions.php';
-// require_once plugin_dir_path(__FILE__) . 'includes/rest_api_functions.php';
-
-// global $ozhands_products_ids;
+global $ozhands_name;
+$ozhands_name = 'Ozhands'; // Name in Admin Panel
 
 require_once plugin_dir_path(__FILE__) . 'includes/retailers_requests/retailers_requests.php';
 require_once plugin_dir_path(__FILE__) . 'includes/rest_api/rest_api_functions.php';
@@ -25,6 +22,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/registration.php';
 require_once plugin_dir_path(__FILE__) . 'includes/products/ozh_retailer_packages.php';
 require_once plugin_dir_path(__FILE__) . 'includes/emails/custom_emails.php';
 require_once plugin_dir_path(__FILE__) . 'includes/timers/day_timer.php';
+require_once plugin_dir_path(__FILE__) . 'includes/zip_create/zip_create.php';
 
 $ozh_custom_emails = new OZH_custom_emails;
 
@@ -32,24 +30,52 @@ if ( is_admin() ) {
 	wp_enqueue_style('ozh-retailer-admin', home_url().'/wp-content/plugins/ozhands_retailers/css/retailer-admin.css');
 }
 wp_enqueue_style('retailer-registration-form', home_url().'/wp-content/plugins/ozhands_retailers/css/retailer-registration-form.css');
+wp_enqueue_style('ozh-retailer-packages', home_url().'/wp-content/plugins/ozhands_retailers/css/retailer-packages.css');
 
-// Alex test page
-add_shortcode('alex_test', 'ozh_day_timer');
+register_activation_hook( __FILE__, function() {
 
+    if ( ! function_exists( 'get_plugins' ) ) {
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+    }
+    $all_plugins = get_plugins();
 
-register_activation_hook( __FILE__, 'ozhands_retailers_instal' );
-function ozhands_retailers_instal(){
-    $seller = get_role( 'seller' );
-    add_role('retailer', 'Retailer', $seller->capabilities);  
-}
+    foreach ($all_plugins as $key => $value) {
 
-register_deactivation_hook( __FILE__, 'ozhands_retailers_deactivation' );
-function ozhands_retailers_deactivation() {
+        if ( $pos = stripos( $key, '/dokan.php') ) {
+            $version = substr( $key, 0, $pos );
+            $version = substr( $version, 6 );
+        }
+    }
+    if ( $version === NULL ) {
+        $version = 'lite';
+    }
+	if ( !is_plugin_active( 'woocommerce/woocommerce.php' ) ) {
+		die('It requires WooCommerce in order to work.');
+	} 
+	elseif ( !is_plugin_active( 'dokan-'.$version.'/dokan.php' ) ) {
+		die('It requires Dokan in order to work.'); 
+	} 
+	else {
+		$seller = get_role( 'seller' );
+		add_role('retailer', 'Retailer', $seller->capabilities);
+		ozh_creating_reatiler_posts();
+		ozh_upload_image();
+		
+		if ( ! wp_next_scheduled( 'ozh_task_hook' ) ) {
+		    $day = '1 day';
+    		$time = (new DateTime('now 00:00:00'))->modify($day)->getTimestamp();
+			wp_schedule_event( $time, 'daily', 'ozh_task_hook' );
+		}
+	}
+});
+
+register_deactivation_hook( __FILE__, 'ozh_retailers_deactivation' );
+function ozh_retailers_deactivation() {
     remove_role( 'retailer' );
 }
 
-add_action ('plugins_loaded', 'ozhands_retailers_init');
-function ozhands_retailers_init() {
+add_action ('plugins_loaded', 'ozh_retailers_init');
+function ozh_retailers_init() {
 
 	$cuser = wp_get_current_user();
 	if($cuser->roles[0] == 'retailer') {
@@ -57,27 +83,29 @@ function ozhands_retailers_init() {
 	}	
 }
 
-add_action ('init', 'ozhands_upload_image');
-function ozhands_upload_image() {
+/**
+ * add image for ratailer products to media library
+ */
+function ozh_upload_image() {
 
 	if ( !get_option('ozh_clear_image_id') ) {	
 		require_once ABSPATH . 'wp-admin/includes/media.php';
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/image.php';
 
-	    $file = plugin_dir_url( __FILE__ ).'img/no-image.png';
-	    $src = media_sideload_image( $file, 0, 'no-image', 'src');
+	    $file = plugin_dir_url( __FILE__ ).'img/no-retailer-image.png';
+	    $src = media_sideload_image( $file, 0, 'no-retailer-image', 'src');
 		if( is_wp_error($src) ){
 			echo $src->get_error_message();
 		}
 		else {
 			$path = wp_upload_dir();
-			$filename =  $path['path'].'/no-image.png';
+			$filename =  $path['path'].'/no-retailer-image.png';
 			$wp_upload_dir = wp_upload_dir();
 		    $attachment = array(
 		    	'guid' => $wp_upload_dir['url'] . '/' . basename( $filename ),
 		    	'post_mime_type' => 'image/png',
-		    	'post_title' => 'no-image',
+		    	'post_title' => 'no-retailer-image',
 		    	'post_content' => '',
 		    	'post_status' => 'inherit'
 	    	);
@@ -115,7 +143,8 @@ function ozh_get_attachment_image_attributes( $attr, $attachment, $size ) {
 	$user_meta = get_userdata( $post->post_author );
 	if ( $user_meta->roles[0] == 'retailer' && $attachment->ID == (int)get_option( 'ozh_clear_image_id' ) ) {
 		$attr['src'] = get_post_meta( $post->ID, 'ozh_image_src', true );
-		$attr['srcset'] = get_post_meta( $post->ID, 'ozh_image_srcset', true );
+		// $attr['srcset'] = get_post_meta( $post->ID, 'ozh_image_srcset', true );
+		unset( $attr['srcset'] );
 	}
 	return $attr;
 }
@@ -174,8 +203,7 @@ function ozh_product_meta_start() {
 /**
  * Creating posts, pages and shortcodes
  */
-add_action ('init', 'creating_reatiler_posts');
-function creating_reatiler_posts() {
+function ozh_creating_reatiler_posts() {
 	if ( !get_page_by_path('retailer-registration') ) {
 		wp_insert_post( array(
 			'post_name'    => 'retailer-registration',
@@ -184,6 +212,16 @@ function creating_reatiler_posts() {
 			'post_author'   => 1,
 			'post_type' 	=> 'page',
 			'post_title' 	=> 'Register'
+		) );
+	}
+	if ( !get_page_by_path('thank-you-page') ) {
+		wp_insert_post( array(
+			'post_name'    => 'thank-you-page',
+			'post_content'  => 'Congratulations on activating the trial version of the Package!',
+			'post_status'   => 'publish',
+			'post_author'   => 1,
+			'post_type' 	=> 'page',
+			'post_title' 	=> 'Congratulations!'
 		) );
 	}
 
@@ -209,7 +247,7 @@ function creating_reatiler_posts() {
 		) );
 	}
 
-	$product_id = get_option('retailer-subscription');
+	$product_id = get_option('ozh_retailer_subscription');
 	$product = get_post($product_id);
 	if ( !$product ) {
 		$product_id = wp_insert_post( array(
@@ -224,6 +262,25 @@ function creating_reatiler_posts() {
 				'_virtual' => 'yes'
 			],
 		) );
-		update_option( 'retailer-subscription', $product_id );		
+		update_option( 'ozh_retailer_subscription', $product_id );		
 	}	
+}
+
+
+/**
+ * Add usermeta to new Retailer
+ */
+add_action('user_register', 'ozh_user_register', 5);
+function ozh_user_register( $user_id) {
+
+	ozh_add_retailer_meta( $user_id, true );
+}
+
+/**
+ * Add Retailer usermeta after user edit
+ */
+add_action('profile_update', 'ozh_profile_update', 5);
+function ozh_profile_update( $user_id) {
+
+	ozh_add_retailer_meta( $user_id, false );
 }

@@ -2,8 +2,8 @@
 
 wp_enqueue_style('ozh-retailer-style', home_url().'/wp-content/plugins/ozhands_retailers/css/dashboard.css');
 
-add_filter('dokan_get_template_part', 'dashboard_get_template_part', 10, 3);
-function dashboard_get_template_part($template, $slug, $name) {
+add_filter('dokan_get_template_part', 'ozh_dashboard_get_template_part', 10, 3);
+function ozh_dashboard_get_template_part($template, $slug, $name) {
     if( $slug == 'dashboard/sales-chart-widget' ) {
         $template = plugin_dir_path(__FILE__) . 'templates/right-widget.php';
         return $template;
@@ -28,41 +28,77 @@ function dashboard_get_template_part($template, $slug, $name) {
     if ( $slug == 'settings/store-form' ) {
         $template = plugin_dir_path(__FILE__) . 'templates/store-form.php';
     }
+    if ( $slug == 'dashboard/announcement-widget' ) {
+        $template = '';
+    }
     return $template;
 }
 
-add_filter( 'dokan_get_dashboard_nav', 'retailer_dashboard_nav' );
-function retailer_dashboard_nav( $urls ) {
+add_filter( 'dokan_get_dashboard_nav', 'ozh_retailer_dashboard_nav', 99 );
+function ozh_retailer_dashboard_nav( $urls ) {
     
     unset( $urls['orders'] );
     unset( $urls['withdraw'] );
+    unset( $urls['coupons'] );
+    unset( $settings['followers'] ); 
+    unset( $urls['reports'] );
+    unset( $settings['followers'] ); 
+    unset( $urls['reviews'] );
+    unset( $settings['followers'] ); 
+    unset( $urls['followers'] );
+    unset( $settings['followers'] );
+    unset( $urls['support'] );
+    unset( $urls['return-request'] );
     unset( $urls['settings']['sub']['payment']);
+    unset( $urls['settings']['sub']['shipping']);
+    unset( $urls['settings']['sub']['social']);
+    unset( $urls['settings']['sub']['rma']);
+    unset( $urls['settings']['sub']['seo']);
     return $urls;
 }
 
 /**
  * return array (subscriptions data) of current user
  */
-function get_subscriptions_data( $user_id ) {
+function ozh_get_subscriptions_data( $user_id ) {
 
-    $status = ozh_get_retailer_time_limit( $user_id );
     $package_data = end( ozh_get_retailer_packages_data( $user_id ) );
+    $today = strtotime( wp_date('d-m-Y') );
+    $trial = ozh_get_trial_date( $user_id );
 
+    if ( !$package_data && $trial ) {
+
+        $data['start'] = date_i18n( 'j F Y',  get_user_meta( $user_id, 'ozh_trial_start_date', true ) );
+        $data['finish'] = date_i18n( 'j F Y', $trial + $today );
+        $data['product_id'] = get_user_meta( $user_id, 'ozh_package_id', true );
+        $data['products_limit'] = ozh_get_retailer_product_limit( $user_id, $data['product_id'] );
+
+        if ( get_user_meta( $user_id, 'ozh_retailer_store_block', true ) != 'block' ) {
+            $data['status'] = 'active';
+        }
+        else {
+            $data['status'] = 'block'; 
+        }
+        return $data;
+    }
     if ( $package_data ) {
-        $today = strtotime( wp_date('d-m-Y') );
 
-        if ( $today < $package_data['finish_date'] ) {
-            $time = ( $package_data['finish_date'] - $today ) / 86400;
+        $finish_date = $package_data['finish_date'] + $trial;
+        $time = 0;
+        $data['status'] = 'inactive';
+        
+        if ( $today < $finish_date ) {
+            $time = ( $finish_date - $today ) / 86400;
         }
         $data['start'] = date_i18n( 'j F Y', $package_data['start_date'] );
-        $data['finish'] = date_i18n( 'j F Y', $package_data['finish_date'] );
+        $data['finish'] = date_i18n( 'j F Y', $finish_date );
         $data['product_id'] = $package_data['package_id'];
         $data['products_limit'] = ozh_get_retailer_product_limit( $user_id, $data['product_id'] );
 
-        if ( $time !== 0 && get_user_meta( $user_id, 'ozh_retailer_store_block', true ) != 'block' ) {
+        if ( $time > 0 && get_user_meta( $user_id, 'ozh_retailer_store_block', true ) != 'block' ) {
             $data['status'] = 'active';
         }
-        elseif ( $time !== 0 && get_user_meta( $user_id, 'ozh_retailer_store_block', true ) == 'block' ) {
+        elseif ( $time > 0 && get_user_meta( $user_id, 'ozh_retailer_store_block', true ) == 'block' ) {
             $data['status'] = 'block';   
         }
     } 
@@ -84,8 +120,8 @@ add_filter( 'woocommerce_enable_order_notes_field', '__return_false', 9999 );
 /**
  * checkout fields editing
  */
-add_filter( 'woocommerce_checkout_fields' , 'retailer_checkout_fields', 99 );
-function retailer_checkout_fields( $fields ) {
+add_filter( 'woocommerce_checkout_fields' , 'ozh_retailer_checkout_fields', 99 );
+function ozh_retailer_checkout_fields( $fields ) {
 
     unset( $fields['billing']['billing_country'] );
     unset( $fields['billing']['billing_city'] );
@@ -100,13 +136,9 @@ function retailer_checkout_fields( $fields ) {
 
     $current_user = wp_get_current_user();
     $user_id = $current_user->ID;
-
-    $fields['billing']['billing_company']['label'] = 'Site name';
-    $fields['billing']['billing_company']['placeholder'] = $current_user->user_url;
-    $fields['billing']['billing_company']['required'] = true;
-    $fields['billing']['billing_first_name']['placeholder'] = $current_user->user_firstname;
-    $fields['billing']['billing_last_name']['placeholder'] = $current_user->user_lastname;
-    $fields['billing']['billing_phone']['placeholder'] = get_user_meta( $user_id, 'phone', true );
+    unset( $fields['billing']['billing_company'] );
+    unset( $fields['billing']['billing_company']['label'] );
+    unset( $fields['billing']['billing_company']['placeholder'] );
    
     return $fields;
 }
@@ -114,45 +146,58 @@ function retailer_checkout_fields( $fields ) {
 /**
  * add account field
  */
-add_filter('woocommerce_edit_account_form_start', 'retailer_add_field_edit_account_form');
-function retailer_add_field_edit_account_form() {
+add_filter('woocommerce_edit_account_form_start', 'ozh_retailer_add_field_edit_account_form');
+function ozh_retailer_add_field_edit_account_form() {
     woocommerce_form_field(
             'user_url',
         array(
             'type'        => 'text',
             'required'    => true, // this doesn't make the field required, just adds an "*"
-            'label'       => 'Site name',
+            'label'       => 'Site url',
         ),
-        get_retailer_url( get_current_user_id() )
+        ozh_get_retailer_url( get_current_user_id() )
     );
 }
 
 /**
  * save account field value
  */
-add_action( 'woocommerce_save_account_details', 'retailer_save_account_details' );
-function retailer_save_account_details( $user_id ) {
- 
+add_action( 'woocommerce_save_account_details', 'ozh_retailer_save_account_details' );
+function ozh_retailer_save_account_details( $user_id ) {
+
     wp_update_user( array(
         'ID' => $user_id,
         'user_url' => $_POST[ 'user_url' ]
-   ) ); 
+    ) );        
+}
+
+/**
+ * errors handler
+ */
+add_action( 'woocommerce_save_account_details_errors','ozh_validate_custom_field', 10, 1 );
+function ozh_validate_custom_field( $args ) {
+
+    if ( isset($_POST[ 'user_url']) ) {
+        if ( ozh_check_unique_url( $_POST[ 'user_url'] ) === false ) {
+            $args->add( 'error', __( 'Sorry, this url address is already used!', 'woocommerce' ),'' );
+        }
+    }
 }
 
 /**
  * make account field required
  */
-add_filter('woocommerce_save_account_details_required_fields', 'retailer_make_field_required');
-function retailer_make_field_required( $required_fields ){
+add_filter('woocommerce_save_account_details_required_fields', 'ozh_retailer_make_field_required');
+function ozh_retailer_make_field_required( $required_fields ){
  
-    $required_fields['user_url'] = 'Site name';
+    $required_fields['user_url'] = 'Site url';
     return $required_fields; 
 }
 
 /**
  * return retailer url
  */
-function get_retailer_url( $user_id ) {
+function ozh_get_retailer_url( $user_id ) {
     $user = get_user_by( 'id', $user_id );
     return $user->user_url;
 }

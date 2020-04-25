@@ -4,7 +4,12 @@
  * Importing of Products - widget
  */
 ?>
-<?php if ( $_GET['percentage'] ) : ?>
+<?php
+$user_id = get_current_user_id();
+$ozhands_connection = get_user_meta( $user_id, 'ozh_zip_name', true );
+$ozhands_connection = base64_encode( $ozhands_connection );
+
+ if ( $_GET['percentage'] ) : ?>
 	<div class="dashboard-widget sells-graph">
 	    <div class="widget-title"> <i class="fa fa-briefcase"></i> <?php echo 'Importing of Products'; ?></div>
 			<ul class="list-unstyled list-count">
@@ -26,4 +31,39 @@
 			</ul>
 	</div> <!-- .sells-graph -->
 <?php endif ?>
+<?php 
+/**
+ * Donwload the plugin "ozhands_connection"
+ */
+?>
+<div class="connection-link-cont">
+	<a class="connection-link" href="<?php echo plugins_url().'/ozhands_retailers/zip_archives/'.$ozhands_connection.'/ozhands_connection.zip'; ?>" download>ItemSync Plugin</a>
+</div>
 
+<?php
+/**
+ * Additional Information
+ */
+?>
+
+<div class="dashboard-widget additional-info" style="margin-top: 18px;">
+    <div class="widget-title">
+    </div>
+
+    <ul class="list-unstyled">
+        <li id="add-info">
+        	<span class="title" style="color: #1A1919;">- Sync/Add All Products Instantly from your site</span>
+        </li>
+        <li id="add-info">
+            <span class="title" style="color: #1A1919;">- Automatic Update when updated in your site</span>
+        </li>
+        <li id="add-info">
+            <span class="title" style="color: #1A1919;">- Secure Connection</span>
+        </li>       
+        <li id="add-info">
+        	<a href="<?php echo home_url().'/itemsync/'; ?>">
+            	<span class="title learn-more">Learn More</span>
+            </a>
+        </li>
+    </ul>
+</div> <!-- .orders -->

@@ -14,6 +14,7 @@ function csv_import() {
 		
 		include_once $_SERVER['DOCUMENT_ROOT'] . '/wp-admin/includes/file.php';
 		include_once $_SERVER['DOCUMENT_ROOT'] . '/wp-content/plugins/woocommerce/includes/import/class-wc-product-csv-importer.php';
+		// include_once dirname( dirname( __FILE__ ) ) . '/csv_import/import/class-wc-product-csv-importer.php';
 		include_once $_SERVER['DOCUMENT_ROOT']. '/wp-content/plugins/woocommerce/includes/admin/importers/class-wc-product-csv-importer-controller.php';
 		
 		wp_register_script('wc-product-import', home_url().'/wp-content/plugins/ozhands_retailers/includes/csv_import/ozh-wc-product-import.js', array(), null, true);
@@ -27,38 +28,24 @@ function csv_import() {
 				$row = 0;
 				$file_name = explode( '/', $_GET['file'] );
 				if (($handle = fopen( wc_clean( wp_unslash( $_GET['file'] ) ) , "r")) !== FALSE) {
-					while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-						if ( !$row ) {
-							for ( $i = 0; $i < count( $data ); $i++ ) {
-								if ( $data[$i] == 'SKU' ) {
-									$sku_num = $i;
-									break;
-								}
-							}
+					$file_name_temp = str_replace( '.csv', '_temp.csv', $_GET['file'] );
+					$file_temp = fopen( $file_name_temp, 'w' );
+					while ( ( $row_data = fgetcsv( $handle, 1000, "," ) ) !== FALSE ) {
+						if ( $row && (int)$row_data[0] ) {
+							$row_data[0] = ozh_create_original_id( $user_id, (int)$row_data[0] );
+							$csv_ids[] = $row_data[0];
 						}
-						else {
-							if ( $sku_num ) {
-								if ( $data[$sku_num] ) {
-									$csv_sku[] = $data[$sku_num];
-								}
-								else {
-									$sku_error = 'error';
-									break;
-								}
-							}
-						}
+						fputcsv( $file_temp, $row_data);
 						$row++;
 					}
+					fclose($file_temp);
 				}
 				else {
 					echo "<h2 class='entry-header'>".$file_name[count($file_name) - 1]." File not open</h2>";
 				}
-				fclose($handle);
-				
-				if ( $sku_error == 'error' ) {
-					echo "<h2 class='entry-header'>Sorry, SKU required for all downlosd products</h2>";
-					return;
-				}
+				fclose( $handle );
+				unlink( $file );
+				rename( $file_name_temp, $file );
 				
 				$retailer_product_csv = $row - 1;
 				
@@ -77,10 +64,10 @@ function csv_import() {
 					echo "<h2 class='entry-header'>The number of products in file ".$file_name[count($file_name) - 1]." - ".$retailer_product_csv." exceeds Your limit - ".$retailer_product_limit."</h2>";
 					return;
 				}
-				if ( $retailer_product_number + count( $csv_sku ) > $retailer_product_limit ) {
+				if ( $retailer_product_number + count( $csv_ids ) > $retailer_product_limit ) {
 					$sum_product_number = $retailer_product_number;
-					foreach ( $csv_sku as $product_sku ) {
-						if ( !ozh_is_product_in_list( $user_id, $product_sku ) ) {
+					foreach ( $csv_ids as $original_id ) {
+						if ( !ozh_is_product_in_list( $user_id, $original_id ) ) {
 							$sum_product_number++;
 						}
 					}
@@ -117,6 +104,7 @@ add_action( 'wp_ajax_nopriv_ozh_do_ajax_product_import', 'ozh_do_ajax_product_im
 add_action( 'wp_ajax_ozh_do_ajax_product_import', 'ozh_do_ajax_product_import' );
 function ozh_do_ajax_product_import() {
 	global $wpdb;
+	global $csv_original_ids;
 
 	check_ajax_referer( 'wc-product-import', 'security' );
 
@@ -189,6 +177,12 @@ function ozh_do_ajax_product_import() {
 		" );
 		// @codingStandardsIgnoreEnd.
 	}
+	
+	// Add Original Retailer Ids to New Products postmeta
+	foreach ( $csv_original_ids as $product_id => $original_id ) {
+		update_post_meta( (int)$product_id, '_original_id', (int)$original_id );
+	}
+	
 	wp_send_json_success(
 		array(
 			'position'   => $importer->get_file_position(),
@@ -201,6 +195,76 @@ function ozh_do_ajax_product_import() {
 		)
 	);
 }
+
+
+// Create Array of Products IDs and Original Retailer Products IDs (3 hooks)
+add_action( 'woocommerce_product_import_before_import', 'ozh_product_import_before_import' );
+function ozh_product_import_before_import( $data ) {
+	global $csv_options;
+	global $csv_original_ids;
+	
+	$k = $csv_options['k'];
+	
+	$product_id = (int)$data['id'];
+	$csv_original_ids[$product_id] = $csv_options[ $csv_options['k'] ]['_original_id'];
+
+	$csv_options['k']++;
+	
+	update_option( 'test_csv_original_ids_'.random_int(1, 1000), $csv_original_ids );
+}
+
+add_action( 'woocommerce_product_importer_before_set_parsed_data', 'ozh_product_importer_before_set_parsed_data', 10, 2 );
+function ozh_product_importer_before_set_parsed_data( $row, $mapped_keys ) {
+	global $csv_options;
+	
+	for ( $i = 0; $i < count( $mapped_keys ); $i++ ) {
+		if ( $mapped_keys[$i] == 'id' ) {
+			$csv_options[]['_original_id'] = $row[$i];
+			break;
+		}
+	}
+}
+
+add_filter( 'woocommerce_product_importer_formatting_callbacks', 'ozh_product_importer_formatting_callbacks', 10, 2 );
+function ozh_product_importer_formatting_callbacks( $callbacks, $importer ) {
+	global $wpdb;
+	global $csv_options;
+	global $csv_original_ids;
+	
+	$csv_options = array();
+	$csv_original_ids = array();
+	$csv_options['k'] = 0;
+	
+	$cur_user_id = get_current_user_id();
+	
+	// Get retailer products
+	$args = array(
+		'posts_per_page' => -1,
+		'paged'          => 1,
+		'author'         => $user_id,
+		'tax_query'      => array(
+			array(
+				'taxonomy' => 'product_type',
+				'field'    => 'slug',
+				'terms'    => array(),
+				'operator' => 'NOT IN',
+			),
+		),
+	);
+	$product_query = dokan()->product->all( $args );
+
+	if ( $products = $product_query->posts ) {
+		foreach ( $products as $product ) {
+			$retailer_product_id = (int)get_post_meta( $product->ID, '_original_id', true );
+			if ( $retailer_product_id ) {
+				$csv_original_ids[$product->ID] = $retailer_product_id;
+			}
+		}
+	}
+
+	return $callbacks;
+}
+
 
 
 	

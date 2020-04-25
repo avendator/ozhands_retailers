@@ -7,9 +7,9 @@
 /**
  * displaying WooCommerce Product Custom Fields
  */
-add_action('woocommerce_product_options_general_product_data', 'woocommerce_product_custom_fields');
+add_action('woocommerce_product_options_general_product_data', 'ozh_woocommerce_product_custom_fields');
 
-function woocommerce_product_custom_fields () {
+function ozh_woocommerce_product_custom_fields () {
 	global $woocommerce, $post;
 	echo '<div class="product_custom_field">';
 	// field of select variant subscription
@@ -44,8 +44,8 @@ function woocommerce_product_custom_fields () {
 /**
  * saves  WooCommerce Product Custom Fields
  */
-add_action( 'woocommerce_process_product_meta', 'woocommerce_product_custom_fields_save' );
-function woocommerce_product_custom_fields_save($post_id) {
+add_action( 'woocommerce_process_product_meta', 'ozh_woocommerce_product_custom_fields_save' );
+function ozh_woocommerce_product_custom_fields_save($post_id) {
 	global $post;
 
 	$product = wc_get_product( $post_id );
@@ -109,7 +109,11 @@ add_filter( 'manage_users_custom_column', 'ozh_users_custom_column', 10, 3 );
 function ozh_users_custom_column( $output, $column_name, $user_id ) {
 	$retailer_pack_id = ozh_get_retailer_package_id( $user_id );
 	$user_meta = get_userdata( $user_id );
+	$trial = ozh_get_trial_date( $user_id );
 
+	if ( !$retailer_pack_id && $trial ) {
+		$retailer_pack_id = get_user_meta( $user_id, 'ozh_package_id', true );
+	}
 	if ( $user_meta->roles[0] == 'retailer' ) {
 		if ($column_name == 'product_limit') {
 			$output .= '<span class="ret-row">'.get_the_title( $retailer_pack_id ).'</span>';
@@ -124,16 +128,16 @@ function ozh_users_custom_column( $output, $column_name, $user_id ) {
 	}
     return $output;
 }
+
 /** 
  * Admin Retailer Packages Table
  *
- *
  * Create new post type "package" and add to Menu
  */
-add_action( 'init', 'retailer_packages' );
-function retailer_packages() {
+add_action( 'init', 'ozh_create_retailer_packages' );
+function ozh_create_retailer_packages() {
 	$args = array(
-		'labels'	=>	array(
+		'labels' =>	array(
 				'name' => 'Packages',
 				'all_items' => 'Packages',
 				'add_new' => 'Add Package',
@@ -169,8 +173,8 @@ function ozh_add_form_after_editor( $post ) {
 /**
  * save or update meta-data of post type "package"
  */
-add_action('publish_package', 'update_retailer_package_meta');
-function update_retailer_package_meta( $post_id ) {
+add_action('publish_package', 'ozh_update_retailer_package_meta');
+function ozh_update_retailer_package_meta( $post_id ) {
 
 	$quantity = trim( $_POST['quantity'] );
 	$price = trim( $_POST['price'] );
@@ -185,8 +189,8 @@ function update_retailer_package_meta( $post_id ) {
 /**
  * Add courses columns to the Packages table
  */
-add_filter( 'manage_package_posts_columns', 'add_packages_column' );
-function add_packages_column($columns) {
+add_filter( 'manage_package_posts_columns', 'ozh_add_packages_column' );
+function ozh_add_packages_column($columns) {
 	$n_columns = array();
 
 	foreach($columns as $key => $value) {
@@ -207,8 +211,8 @@ function add_packages_column($columns) {
 /**
  * Change data packages column in Packages table
  */
-add_action( 'manage_package_posts_custom_column' , 'add_packages_column_data', 10, 2 );
-function add_packages_column_data( $column, $post_id ) {
+add_action( 'manage_package_posts_custom_column' , 'ozh_add_packages_column_data', 10, 2 );
+function ozh_add_packages_column_data( $column, $post_id ) {
 	if ($column == 'quantity') {
 		echo get_post_meta($post_id, 'quantity_of_products', true);
     }

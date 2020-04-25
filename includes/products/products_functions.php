@@ -27,6 +27,8 @@ function ozh_add_product( $user_id, $product_data ) {
 		wp_send_json_success( $action_data );
 	}
 	
+	$action_data['limit'] = $user_status['limit'];
+	
 	// New product data from API Request
 	$data = [
         'name'               => $product_data->name,
@@ -108,6 +110,8 @@ function ozh_update_product( $user_id, $product_data ) {
 		wp_send_json_success( $action_data );
 	}
 	
+	$action_data['limit'] = $user_status['limit'];
+	
 	// Product data from API Request
 	// Main data
 	$data = [
@@ -168,6 +172,8 @@ function ozh_delete_product( $user_id, $product_id ) {
 
 		wp_send_json_success( $action_data );
 	}
+	
+	$action_data['limit'] = $user_status['limit'];
 	
 	// Get retailer products
 	$args = array(
@@ -258,6 +264,8 @@ function ozh_get_products_list( $user_id ) {
 		$action_data['notice_text'] = substr( $action_data['notice_text'], 1 );
 	}
 	$action_data['notice_type'] = 'success';
+	$action_data['limit'] = $user_status['limit'];
+	
 	wp_send_json_success( $action_data );
 }
 
@@ -357,19 +365,34 @@ function ozh_get_retailer_product_limit( $user_id, $package_id = 0 ) {
 	
     $product_limit = 0;
 	$order_array = ozh_get_orders_ids( $user_id );
+	$trial = ozh_get_trial_date( $user_id );
+	// if the retailer already bought the trial package before	
+	if ( !$order_array && $trial ) {
+		if ( $package_id ) {
+			if ( get_user_meta( $user_id, 'ozh_package_id', $package_id ) == $package_id ) {
+				$product_limit = get_user_meta( $user_id, 'ozh_package_product_limit', true );
+				return (int)$product_limit;			
+			}			
+		}
+		else {
+			$product_limit = get_user_meta( $user_id, 'ozh_package_product_limit', true );
+			return (int)$product_limit;
+		}
+	}				
     if ( $order_array ) {
     	$today = strtotime( wp_date('d-m-Y') );
 
     	$finish_dates = [];
     	if ( $package_id ) {
-	        foreach ( $order_array as $order ) {	            
+
+	        foreach ( $order_array as $order ) {
 				if ( get_post_meta( $order['ID'], 'package_id', true ) == $package_id ) {
 		        	$finish_dates[] = [
 		        		'finish_date' => get_post_meta( $order['ID'], 'finish_date', true ),
 		        		'order_id' => $order['ID']
-	        		];				
+	        		];								
 				}
-            }
+			}
 	    }
 	    else {
 	        foreach ( $order_array as $order ) {
@@ -382,11 +405,15 @@ function ozh_get_retailer_product_limit( $user_id, $package_id = 0 ) {
 	            }
         	}
         }
-    	$finish_date = end($finish_dates);
-    	if ( $today < $finish_date['finish_date'] ) {
-    		$product_limit = get_post_meta( $finish_date['order_id'], 'package_product_limit', true );
-    		$product_limit = $product_limit == 'unlimited' ? 'unlimited' : (int)$product_limit;
-    	}
+
+        if ( $finish_dates ) {
+	    	$finish_date = end($finish_dates);
+
+	    	if ( $today < $finish_date ) {
+	    		$product_limit = get_post_meta( $finish_date['order_id'], 'package_product_limit', true );
+	    		$product_limit = $product_limit == 'unlimited' ? 'unlimited' : (int)$product_limit;	    			
+	    	}       	
+        }
     }
     return $product_limit;
 }
@@ -403,15 +430,18 @@ function ozh_is_store_blocked( $user_id ) {
 }
 
 /**
- * retailer ban (do not display products on the site)
+ * retailer ban (do not display products on the site if retailer in block or do not payd for Usage)
  */
-add_action( 'posts_where', 'block_retailer_posts', 10, 2 );
-function block_retailer_posts( $where, \WP_Query $query  ) {
+add_action( 'posts_where', 'ozh_block_retailer_posts', 10, 2 );
+function ozh_block_retailer_posts( $where, \WP_Query $query  ) {
 
-	if( !is_admin() || !$query->is_main_query() ) {		
+	if( !is_admin() ) {	
 
 		global $wpdb;
 	    $users = get_users( ['role' => 'retailer'] );
+		// do not dispay this product never
+		$product_subscription = get_option('ozh_retailer_subscription');
+	    $post_ids = [];
 
 	    foreach ($users as $user ) {
 	        $author_id = $user->data->ID;
@@ -422,28 +452,25 @@ function block_retailer_posts( $where, \WP_Query $query  ) {
 	            $post_ids[] =  $post_id;
 	        }      
 	    }
-	    if ( is_array($post_ids) ) {
-	    	if ( $post_ids ) {
-				$str = '';
+    	if ( $post_ids ) {
+			$str = '';
 
-			    foreach ($post_ids as $post_id) {
-			        $post_id = implode(',', $post_id);
-			        $str .= $post_id.',';
-			    }
-			    $pattern = "/^[^0-9]*/";
-			    // delete "," in start of string
-	            $str = preg_replace($pattern, "", $str);
-	        	$pattern = "/.*(\d)/";
-	        	$pos = preg_match($pattern, $str, $matches, PREG_OFFSET_CAPTURE);
-	        	if ($pos === 1) {
-	        		// string without "," in finish 
-	        		$str = $matches[0][0];
-		        	if ( $str !== '' ) {
-		            	$where .= " AND ".$wpdb->prefix."posts.ID NOT IN ($str)";
-		            }
-	        	}
-	    	}
-	    }
+            foreach ($post_ids as $post_id) {
+            	if ( is_array($post_id) ) {
+	            	if ( $post_id ) {
+		                $post_id = implode(',', $post_id);
+	                    $str .= $post_id.',';          		
+	            	}             		
+            	}             
+            }
+        	if ( $str !== '' ) {
+        		$str .= $product_subscription;
+            	$where .= " AND ".$wpdb->prefix."posts.ID NOT IN ($str)";
+            	
+            } else {
+            	$where .= " AND ".$wpdb->prefix."posts.ID NOT IN ($product_subscription)";
+            }	        	
+    	}
 	}
     return $where;
 }
@@ -481,12 +508,20 @@ function ozh_get_user_status( $user_id ) {
 	
 	// Retailer packege time limit < 3 days
 	if ( $user_status['status'] == 'active' ) {
-		if ( $time_limit = ozh_get_retailer_time_limit( $user_id ) ) {
+		$time_limit = ozh_get_retailer_time_limit( $user_id );
+		if ( $time_limit < 4 ) {
 			$user_status['notice'] .= "<span style='color: red;'> | Your Ozhands package ends in ".$time_limit." days</span>";
 		}
 	}
 	
 	$user_status['notice'] .= "<a href='http://sashatest.upsite.top/dashboard' class='button' style='margin-left: 20px;' target='_blank'>Ozhands dashboard</a>";
+	
+	if ( get_user_meta( $user_id, 'ozh_retailer_store_block', true ) == 'block' ) {
+		$user_status['limit'] = 0;
+	}
+	else {
+		$user_status['limit'] = $retailer_product_limit;
+	}
 	
 	return $user_status;
 }
@@ -497,6 +532,7 @@ function ozh_get_user_status( $user_id ) {
 function ozh_get_retailer_packages_data( $user_id ) {
 
 	$packages_data = [];
+
     $order_array = ozh_get_orders_ids( $user_id );
 
     if ( $order_array ) {
@@ -535,14 +571,20 @@ function ozh_get_retailer_package_id( $user_id ) {
 function ozh_get_retailer_time_limit( $user_id ) {
 
 	$time = 0;
+	// if the retailer already bought the trial package before
+    $trial = ozh_get_trial_date( $user_id );
 	$packages_data = ozh_get_retailer_packages_data( $user_id );
 
+	if ( !$packages_data && $trial ) {
+		$time = $trial / 86400;
+	} 
 	if ( $packages_data ) {
 		$today = strtotime( wp_date('d-m-Y') );
 		$finish_date = end($packages_data);
+		$finish_date = $finish_date['finish_date'] + $trial;
 
-        if ( $today < $finish_date['finish_date'] ) {
-            $time = ( $finish_date['finish_date'] - $today ) / 86400;
+        if ( $today < $finish_date) {
+            $time = ( $finish_date - $today ) / 86400;
         } 
 	}
 	return (int)$time;
@@ -564,4 +606,24 @@ function ozh_get_retailer_product_id( $original_id ) {
 
 	$retailer_product_id = (int)($original_id / 10000000);
 	return $retailer_product_id;
+}
+
+/**
+ * Return the days number of action of the trial package
+ */
+function ozh_get_trial_date( $user_id ) {
+
+	$trial = get_user_meta( $user_id, 'ozh_trial_finish_date', true );
+
+	if ( $trial ) {
+		$start = strtotime( wp_date('d-m-Y') );
+		// ...and active days left
+		if ( $start < $trial ) {
+			$trial = $trial - $start;
+		}
+		else {
+			$trial = 0;
+		}
+	}
+	return (int)$trial;
 }
